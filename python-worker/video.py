@@ -231,7 +231,31 @@ def assemble_video(
             else:
                 # Multiple words - use default font size
                 adjusted_font_size = font_size
-            
+ #         # Create TextClip for each word with adjusted font size
+    #         txt_clip = TextClip(
+    #             text=word_text,
+    #             font=font_path,
+    #             duration=end_time - start_time,
+    #             color=font_color,
+    #             stroke_color=stroke_color,
+    #             stroke_width=stroke_width,
+    #             method='caption',
+    #             font_size=adjusted_font_size,
+    #             size=(text_width,
+    #                   1800),  # Leave margins, auto height for wrapping
+    #             text_align='center')
+
+    #         # Set position - use 'center' for horizontal, fixed Y for vertical
+    #         txt_clip = txt_clip.with_position(('center', 'center'))
+
+    #         # Store clip with its start_time to apply in CompositeVideoClip
+    #         text_clips_with_timing.append((txt_clip, start_time))
+
+    #     # Apply start_time to text clips
+    #     text_clips = [
+    #         clip.with_start(start_time)
+    #         for clip, start_time in text_clips_with_timing
+    #     ]
             txt_clip = TextClip(
                 text=chunk_text,
                 font=font_path,
@@ -241,7 +265,7 @@ def assemble_video(
                 stroke_width=stroke_width,
                 method='caption',
                 font_size=adjusted_font_size,
-                size=(text_width, None),  # Single line, auto height
+                size=(text_width, 1800),  # Single line, auto height
                 text_align='center'
             )
             
