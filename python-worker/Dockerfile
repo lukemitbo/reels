@@ -1,31 +1,32 @@
 FROM python:3.11-slim
 
-# System deps for lxml/ffmpeg (ffmpeg for video processing)
+# 1) system deps:
+# - ffmpeg: required by pydub/moviepy/whisperx
+# - git & ca-certificates/curl: robustness for model downloads
+# - fonts-dejavu: lets MoviePy TextClip render text without ImageMagick
+# - libsndfile1: safer for torchaudio/soundfile
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential ffmpeg ca-certificates curl \
-    && rm -rf /var/lib/apt/lists/*
+    ffmpeg ca-certificates curl git fonts-dejavu-core libsndfile1 \
+ && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy requirements first for better caching
+# 2) Python deps first for caching
 COPY requirements.txt .
-
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy all application code and resources
+# 3) App code
 COPY app.py .
 COPY audio.py .
 COPY video.py .
 COPY extract_text.py .
 
-# Copy necessary resources (PNGs and background videos)
+# 4) Media assets (background-videos and final-videos mounted as volumes)
 COPY pngs/ ./pngs/
-COPY background-videos/ ./background-videos/
-COPY final-videos/ ./final-videos/
+RUN mkdir -p audios final-videos background-videos fonts
 
-# Create directories for temporary files (if needed)
-RUN mkdir -p audios final-videos
+# Optional: set env so MoviePy/imageio use system ffmpeg explicitly
+ENV IMAGEIO_FFMPEG_EXE=ffmpeg
 
 EXPOSE 8000
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
-
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

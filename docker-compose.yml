@@ -27,6 +27,12 @@ services:
       - "8000:8000"  # Expose for testing; n8n can also reach it internally
     environment:
       - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
     volumes:
-      - ./data:/data
+      - ./python-worker:/app        # Mount local code -> container for live reload
+      - ./data:/data                # Shared data volume
+      - ./python-worker/background-videos:/app/background-videos
+      - ./python-worker/final-videos:/app/final-videos
+      - ./python-worker/fonts:/app/fonts
+    command: uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 

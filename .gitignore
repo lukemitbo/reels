@@ -1,9 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
 .env
-.venv
+.env.local
+.env.*.local
+
+# Data outputs
+data/out/
+data/tmp/
+
+# Generated media files
+python-worker/final-videos/
+python-worker/audios/
+final-videos/
+
+# Background videos (keep directory, ignore contents)
+python-worker/background-videos/*
+
+# n8n data
+n8n/
+
+# OS files
 .DS_Store
-reels/python-worker/background-videos/*
-reels/python-worker/audios/*
-reels/python-worker/pngs/*
-reels/python-worker/final-videos/*
-node_modules/*
-n8n
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+*.log.*
+
+# Database files
+*.sqlite
+*.sqlite3
+*.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
