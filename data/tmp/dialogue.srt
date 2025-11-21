@@ -1,0 +1,8 @@
+1
+00:00:00,010 --> 00:00:07,300
+hey <unk> have you seen this new visual studio <unk> they say it's <unk> native now like it practically thinks for you
+
+2
+00:00:07,711 --> 00:00:20,981
+oh peter if by thinks you mean it's embedded with <unk> that smartly detects <unk> suggests file names and even <unk> mermaid charts then yes it's practically your own tiny coding genius in a box
+

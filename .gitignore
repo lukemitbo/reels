@@ -1,0 +1,9 @@
+.env
+.venv
+.DS_Store
+reels/python-worker/background-videos/*
+reels/python-worker/audios/*
+reels/python-worker/pngs/*
+reels/python-worker/final-videos/*
+node_modules/*
+n8n
