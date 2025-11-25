@@ -1,4 +1,3 @@
-```markdown
 # 🤖 Reels Maker
 
 Create engaging reels from text prompts using AI.
