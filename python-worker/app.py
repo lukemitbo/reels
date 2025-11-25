@@ -43,6 +43,7 @@ class GenerateScriptRequest(BaseModel):
     text: str # the prompt to be sent to gpt-o3
 
 class GenerateScriptResponse(BaseModel):
+    title: str
     script: list[tuple[str, str]] # (speaker, text)
 
 @app.post("/extract", response_model=ExtractResponse)
@@ -50,7 +51,7 @@ def extract(req: ExtractRequest):
     logger.info(f"Requesting to extract: {req.urls}")
     out = []
     seen = set()
-    for url in req.urls[:6]:  # cap to 3–6 sources for speed
+    for url in req.urls[:10]:  # cap to 10 sources for speed
         if url in seen:
             continue
         seen.add(url)
@@ -83,8 +84,8 @@ def format_script(req: FormatRequest):
 
 @app.post("/generate-script", response_model=GenerateScriptResponse)
 def generate_script(req: GenerateScriptRequest):
-    script: list[tuple[str, str]] = generate_script_func(req.text)
-    return {"script": script}
+    title: str, script: list[tuple[str, str]] = generate_script_func(req.text)
+    return {"title": title, "script": script}
 
 @app.post("/generate-script-manual", response_model=GenerateScriptResponse)
 def generate_script_manual(req: GenerateScriptRequest):

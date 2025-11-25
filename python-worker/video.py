@@ -95,12 +95,13 @@ def assemble_video(
     dialogue_wav_path: str,
     bg_folder: str,
     out_path: str,
+    speaker_timings: list[tuple[str, float, float]],
+    pngs_folder: str,
+    word_alignments: list[tuple[str, float, float]],
+    font_path: str,
+    title: str,
     fps: int = 30,
     bitrate: str = "6M",
-    speaker_timings: Optional[list[tuple[str, float, float]]] = None,
-    pngs_folder: Optional[str] = None,
-    word_alignments: Optional[list[tuple[str, float, float]]] = None,
-    font_path: Optional[str] = None,
 ):
     voice = AudioFileClip(dialogue_wav_path)
     audio_duration = voice.duration
@@ -130,231 +131,223 @@ def assemble_video(
     # Explicitly trim to ensure it starts at t=0 and has proper frame timing
     base_clip = bg_v.subclipped(0, audio_duration).with_audio(voice)
 
-    # Add PNG overlays if timing data is provided
+    # Video dimensions
+    video_width = 1080
+    video_height = 1920
+    
+    # Add title text clip
+    title_font_size = 70
+    title_font_color = 'white'
+    title_stroke_color = 'black'
+    title_stroke_width = 3
+    title_duration = min(10.0, audio_duration)  # Show for first 10 seconds or until audio ends
+    title_text_width = 1000  # Slightly narrower than video width for margins
+    
+    # Position title just below top of screen (about 5% from top)
+    title_y_pos = int(video_height * 0.05)
+    
+    # Create title text clip
+    title_clip = TextClip(
+        text=title.upper(),
+        font=font_path,
+        duration=title_duration,
+        color=title_font_color,
+        stroke_color=title_stroke_color,
+        stroke_width=title_stroke_width,
+        method='caption',
+        font_size=title_font_size,
+        size=(title_text_width, 1800),  # Auto height
+        text_align='center'
+    )
+    
+    # Center horizontally, position near top
+    title_clip = title_clip.with_position(('center', title_y_pos))
+    title_clip = add_landing_effect(title_clip, 0.2)
+    
+    # Add PNG overlays
     overlay_clips = []
+    target_png_height = int(video_height * 0.4)  # 40% of video height
+
+    # Load PNG images
+    peter_png_path = os.path.join(pngs_folder, "Peter_Griffin.png")
+    stewie_png_path = os.path.join(pngs_folder, "Stewie_Griffin.png")
+
+    if not os.path.exists(peter_png_path):
+        raise FileNotFoundError(f"Peter PNG not found at {peter_png_path}")
+    if not os.path.exists(stewie_png_path):
+        raise FileNotFoundError(
+            f"Stewie PNG not found at {stewie_png_path}")
+
+    # Get original image dimensions to calculate proportional scaling
+    peter_img = ImageClip(peter_png_path)
+    stewie_img = ImageClip(stewie_png_path)
+
+    # Calculate scale factors based on target height
+    peter_scale = target_png_height / peter_img.h
+    stewie_scale = target_png_height / stewie_img.h
+
+    # Calculate proportional widths
+    peter_width = int(peter_img.w * peter_scale)
+    peter_height = target_png_height
+    stewie_width = int(stewie_img.w * stewie_scale)
+    stewie_height = target_png_height
+
+    # Close temporary clips used for dimension checking
+    peter_img.close()
+    stewie_img.close()
+
+    # Create overlay clips for each timing segment
+    for speaker, start_time, end_time in speaker_timings:
+        # Determine which PNG to use, dimensions, and position
+        if speaker == "peter":
+            png_path = peter_png_path
+            png_width = peter_width
+            png_height = peter_height
+            x_pos = 0  # bottom-left
+        elif speaker == "stewie":
+            png_path = stewie_png_path
+            png_width = stewie_width
+            png_height = stewie_height
+            x_pos = video_width - png_width  # bottom-right
+        else:
+            continue  # Skip unknown speakers
+
+        y_pos = video_height - png_height  # bottom alignment for both
+
+        # Create ImageClip for this segment
+        img_clip = ImageClip(png_path, duration=end_time - start_time)
+        img_clip = img_clip.with_effects(
+            [vfx.Resize((png_width, png_height))])
+        img_clip = img_clip.with_start(start_time)
+        img_clip = img_clip.with_position((x_pos, y_pos))
+
+        overlay_clips.append(img_clip)
+
+    # Add word-level captions
     text_clips = []
-    if speaker_timings and pngs_folder:
-        video_width = 1080
-        video_height = 1920
-        target_png_height = int(video_height * 0.4)  # 40% of video height
+    
+    # Caption styling
+    font_size = 90
+    font_color = 'yellow'
+    stroke_color = 'black'
+    stroke_width = 2
 
-        # Load PNG images
-        peter_png_path = os.path.join(pngs_folder, "Peter_Griffin.png")
-        stewie_png_path = os.path.join(pngs_folder, "Stewie_Griffin.png")
+    text_clips_with_timing = []
+    text_width = 960
 
-        if not os.path.exists(peter_png_path):
-            raise FileNotFoundError(f"Peter PNG not found at {peter_png_path}")
-        if not os.path.exists(stewie_png_path):
-            raise FileNotFoundError(
-                f"Stewie PNG not found at {stewie_png_path}")
+    def create_text_clip(chunk_words, start_time, end_time):
+        """Helper function to create a text clip from words, ensuring single line."""
+        if not chunk_words:
+            return None
+        
+        chunk_text = " ".join(chunk_words).upper()
+        
+        # If single word, shrink font until it fits
+        if len(chunk_words) == 1:
+            adjusted_font_size = font_size
+            while adjusted_font_size >= 20:
+                if not _check_text_wraps(chunk_text, font_path,
+                                            adjusted_font_size, text_width,
+                                            stroke_width, 'center'):
+                    break  # Fits on one line
+                adjusted_font_size -= 15
+            adjusted_font_size = max(adjusted_font_size, 20)
+        else:
+            # Multiple words - use default font size
+            adjusted_font_size = font_size
 
-        # Get original image dimensions to calculate proportional scaling
-        peter_img = ImageClip(peter_png_path)
-        stewie_img = ImageClip(stewie_png_path)
+        txt_clip = TextClip(
+            text=chunk_text,
+            font=font_path,
+            duration=end_time - start_time,
+            color=font_color,
+            stroke_color=stroke_color,
+            stroke_width=stroke_width,
+            method='caption',
+            font_size=adjusted_font_size,
+            size=(text_width, 1800),  # Single line, auto height
+            text_align='center'
+        )
+        
+        txt_clip = txt_clip.with_position(('center', 'center'))
+        txt_clip = add_landing_effect(txt_clip, 0.15)
+        return txt_clip
 
-        # Calculate scale factors based on target height
-        peter_scale = target_png_height / peter_img.h
-        stewie_scale = target_png_height / stewie_img.h
+    # Group words into chunks, checking for wrapping after each word
+    current_chunk_words = []
+    chunk_start_time = None
+    chunk_end_time = None
+    current_chunk_speaker = None
 
-        # Calculate proportional widths
-        peter_width = int(peter_img.w * peter_scale)
-        peter_height = target_png_height
-        stewie_width = int(stewie_img.w * stewie_scale)
-        stewie_height = target_png_height
-
-        # Close temporary clips used for dimension checking
-        peter_img.close()
-        stewie_img.close()
-
-        # Create overlay clips for each timing segment
-        for speaker, start_time, end_time in speaker_timings:
-            # Determine which PNG to use, dimensions, and position
-            if speaker == "peter":
-                png_path = peter_png_path
-                png_width = peter_width
-                png_height = peter_height
-                x_pos = 0  # bottom-left
-            elif speaker == "stewie":
-                png_path = stewie_png_path
-                png_width = stewie_width
-                png_height = stewie_height
-                x_pos = video_width - png_width  # bottom-right
-            else:
-                continue  # Skip unknown speakers
-
-            y_pos = video_height - png_height  # bottom alignment for both
-
-            # Create ImageClip for this segment
-            img_clip = ImageClip(png_path, duration=end_time - start_time)
-            img_clip = img_clip.with_effects(
-                [vfx.Resize((png_width, png_height))])
-            img_clip = img_clip.with_start(start_time)
-            img_clip = img_clip.with_position((x_pos, y_pos))
-
-            overlay_clips.append(img_clip)
-
-    # Add word-level captions if word alignments are provided
-    if word_alignments:
-        video_width = 1080
-        video_height = 1920
-
-        # Caption styling
-        font_size = 90
-        font_color = 'yellow'
-        stroke_color = 'black'
-        stroke_width = 2
-
-        # Set default font path if not provided
-        if font_path is None:
-            font_path = "/app/fonts/SuperMalibu-Wp77v.ttf"
-
-        text_clips_with_timing = []
-        text_width = 960
-
-        def create_text_clip(chunk_words, start_time, end_time):
-            """Helper function to create a text clip from words, ensuring single line."""
-            if not chunk_words:
-                return None
-            
-            chunk_text = " ".join(chunk_words).upper()
-            
-            # If single word, shrink font until it fits
-            if len(chunk_words) == 1:
-                adjusted_font_size = font_size
-                while adjusted_font_size >= 20:
-                    if not _check_text_wraps(chunk_text, font_path,
-                                             adjusted_font_size, text_width,
-                                             stroke_width, 'center'):
-                        break  # Fits on one line
-                    adjusted_font_size -= 15
-                adjusted_font_size = max(adjusted_font_size, 20)
-            else:
-                # Multiple words - use default font size
-                adjusted_font_size = font_size
- #         # Create TextClip for each word with adjusted font size
-    #         txt_clip = TextClip(
-    #             text=word_text,
-    #             font=font_path,
-    #             duration=end_time - start_time,
-    #             color=font_color,
-    #             stroke_color=stroke_color,
-    #             stroke_width=stroke_width,
-    #             method='caption',
-    #             font_size=adjusted_font_size,
-    #             size=(text_width,
-    #                   1800),  # Leave margins, auto height for wrapping
-    #             text_align='center')
-
-    #         # Set position - use 'center' for horizontal, fixed Y for vertical
-    #         txt_clip = txt_clip.with_position(('center', 'center'))
-
-    #         # Store clip with its start_time to apply in CompositeVideoClip
-    #         text_clips_with_timing.append((txt_clip, start_time))
-
-    #     # Apply start_time to text clips
-    #     text_clips = [
-    #         clip.with_start(start_time)
-    #         for clip, start_time in text_clips_with_timing
-    #     ]
-            txt_clip = TextClip(
-                text=chunk_text,
-                font=font_path,
-                duration=end_time - start_time,
-                color=font_color,
-                stroke_color=stroke_color,
-                stroke_width=stroke_width,
-                method='caption',
-                font_size=adjusted_font_size,
-                size=(text_width, 1800),  # Single line, auto height
-                text_align='center'
-            )
-            
-            txt_clip = txt_clip.with_position(('center', 'center'))
-            txt_clip = add_landing_effect(txt_clip, 0.15)
-            return txt_clip
-
-        # Group words into chunks, checking for wrapping after each word
-        current_chunk_words = []
-        chunk_start_time = None
-        chunk_end_time = None
-        current_chunk_speaker = None
-
-        for word, start_time, end_time in word_alignments:
-            # Determine which speaker is speaking for this word
-            word_speaker = None
-            if speaker_timings:
-                word_speaker = get_speaker_at_time(speaker_timings, start_time)
-            
-            # Check if speaker changed
-            speaker_changed = False
+    for word, start_time, end_time in word_alignments:
+        # Determine which speaker is speaking for this word
+        word_speaker = None
+        if speaker_timings:
+            word_speaker = get_speaker_at_time(speaker_timings, start_time)
+        
+        # Check if speaker changed
+        speaker_changed = False
+        if current_chunk_words:
+            if current_chunk_speaker is not None and word_speaker != current_chunk_speaker:
+                speaker_changed = True
+            elif current_chunk_speaker is None and word_speaker is not None:
+                speaker_changed = True
+        
+        # If speaker changed, finalize current chunk first
+        if speaker_changed:
             if current_chunk_words:
-                if current_chunk_speaker is not None and word_speaker != current_chunk_speaker:
-                    speaker_changed = True
-                elif current_chunk_speaker is None and word_speaker is not None:
-                    speaker_changed = True
-            
-            # If speaker changed, finalize current chunk first
-            if speaker_changed:
-                if current_chunk_words:
-                    txt_clip = create_text_clip(current_chunk_words, chunk_start_time, chunk_end_time)
-                    if txt_clip:
-                        text_clips_with_timing.append((txt_clip, chunk_start_time))
-                # Start new chunk
-                current_chunk_words = []
-                chunk_start_time = start_time
-                chunk_end_time = end_time
-                current_chunk_speaker = word_speaker
-            
-            # Initialize chunk if empty
-            if not current_chunk_words:
-                chunk_start_time = start_time
-                chunk_end_time = end_time
-                current_chunk_speaker = word_speaker
-            
-            # Test if adding this word causes wrapping
-            test_words = current_chunk_words + [word]
-            test_text = " ".join(test_words).upper()
-            
-            # Check if adding this word causes wrapping
-            wraps = _check_text_wraps(test_text, font_path, font_size, text_width, stroke_width, 'center')
-            
-            if wraps and current_chunk_words:
-                # Adding this word causes wrapping, so finalize current chunk without this word
                 txt_clip = create_text_clip(current_chunk_words, chunk_start_time, chunk_end_time)
                 if txt_clip:
                     text_clips_with_timing.append((txt_clip, chunk_start_time))
-                
-                # Start new chunk with this word
-                current_chunk_words = [word]
-                chunk_start_time = start_time
-                chunk_end_time = end_time
-                current_chunk_speaker = word_speaker
-            else:
-                # Word fits, add it to current chunk
-                current_chunk_words.append(word)
-                chunk_end_time = end_time
+            # Start new chunk
+            current_chunk_words = []
+            chunk_start_time = start_time
+            chunk_end_time = end_time
+            current_chunk_speaker = word_speaker
         
-        # Create clip for remaining chunk if any
-        if current_chunk_words:
+        # Initialize chunk if empty
+        if not current_chunk_words:
+            chunk_start_time = start_time
+            chunk_end_time = end_time
+            current_chunk_speaker = word_speaker
+        
+        # Test if adding this word causes wrapping
+        test_words = current_chunk_words + [word]
+        test_text = " ".join(test_words).upper()
+        
+        # Check if adding this word causes wrapping
+        wraps = _check_text_wraps(test_text, font_path, font_size, text_width, stroke_width, 'center')
+        
+        if wraps and current_chunk_words:
+            # Adding this word causes wrapping, so finalize current chunk without this word
             txt_clip = create_text_clip(current_chunk_words, chunk_start_time, chunk_end_time)
             if txt_clip:
                 text_clips_with_timing.append((txt_clip, chunk_start_time))
+            
+            # Start new chunk with this word
+            current_chunk_words = [word]
+            chunk_start_time = start_time
+            chunk_end_time = end_time
+            current_chunk_speaker = word_speaker
+        else:
+            # Word fits, add it to current chunk
+            current_chunk_words.append(word)
+            chunk_end_time = end_time
+    
+    # Create clip for remaining chunk if any
+    if current_chunk_words:
+        txt_clip = create_text_clip(current_chunk_words, chunk_start_time, chunk_end_time)
+        if txt_clip:
+            text_clips_with_timing.append((txt_clip, chunk_start_time))
 
-        # Apply start_time to text clips
-        text_clips = [
-            clip.with_start(start_time - 0.1)
-            for clip, start_time in text_clips_with_timing
-        ]
+    # Apply start_time to text clips
+    text_clips = [
+        clip.with_start(start_time - 0.1)
+        for clip, start_time in text_clips_with_timing
+    ]
 
-    # Composite all clips together based on what we have
-    if word_alignments:
-        # Composite base + PNG overlays (if any) + text clips
-        final = CompositeVideoClip([base_clip] + overlay_clips + text_clips)
-    elif speaker_timings and pngs_folder:
-        # Composite base + PNG overlays
-        final = CompositeVideoClip([base_clip] + overlay_clips)
-    else:
-        final = base_clip
+    # Composite all clips together
+    final = CompositeVideoClip([base_clip, title_clip] + overlay_clips + text_clips)
 
     # Speed up video
     # final = final.with_effects([vfx.MultiplySpeed(1.3)])
@@ -382,6 +375,7 @@ def assemble_video(
     bg.close()
     bg_v.close()
     final.close()
+    title_clip.close()
     for clip in overlay_clips:
         clip.close()
     for clip in text_clips:
@@ -417,4 +411,5 @@ if __name__ == "__main__":
         pngs_folder=pngs_folder,
         word_alignments=word_alignments,
         font_path=font_path,
+        title="Test Title",
     )

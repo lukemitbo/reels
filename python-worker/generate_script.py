@@ -1,9 +1,9 @@
 from openai import OpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from enum import Enum
 import os
 
-SYSTEM_PROMPT = """
+SCRIPT_SYSTEM_PROMPT = """
 You are writing a short, lighthearted dialogue between Peter Griffin and Stewie Griffin from Family Guy.
 They are discussing a trending AI or technology topic based on the provided context below.
 The goal is to make the dialogue funny, fast-paced, and informative, like a YouTube or TikTok “AI explained by Peter and Stewie” short. The dialogue should provide all info a listener needs to get up to speed on the topic.
@@ -39,56 +39,34 @@ Each line will be sent directly to a text-to-speech library. Only include spoken
 
 Target length: ~200-250 words (~60-75 seconds).
 Each character line length: < 30 words.
+
+Also generate a short title for the dialogue to catch the attention of the user.
 """
 
-MANUAL_SYSTEM_PROMPT = """
-You are writing a short, lighthearted dialogue between Peter Griffin and Stewie Griffin from Family Guy.
-They are discussing the trending AI or technology topic outlined below.
-The goal is to make the dialogue funny, fast-paced, and informative, like a YouTube or TikTok “AI explained by Peter and Stewie” short. The dialogue should provide all info a listener needs to get up to speed on the topic.
+TOPIC_PROMPT = """
+Given the following list of recent news topics, determine which one is the best seed for a short-form news report style technical-focused video. Prioritize research, technical, and business developments. Then, generate a web search query about that topic. Return only the query. Do not include a date. To avoid duplicate queries, do not use any of the following topics: 
+{previous_queries}
 
-Tone & Style:
+Here are the recent news topics: 
+{recent_news_topics}
 
-Conversational, snappy, and character-accurate.
-
-Peter = goofy, amazed, often misunderstanding the tech.
-
-Stewie = sarcastic, genius-level explanations with witty insults.
-
-Blend humor with real facts from the context.
-
-Avoid profanity, politics, or dark humor.
-
-End with a clever punchline or callback.
-
-Formatting and example: (number of turns can vary):
-
-Peter: [first line introducing topic]
-Stewie: [smart or snarky correction]
-Peter: [funny misunderstanding or follow-up question]
-Stewie: [explains with wit + simple analogy]
-Peter: [reacts or jokes]
-Stewie: [ends with a sharp closing line]
-
-Follow the above format strictly. Peter must speak first. Use facts only from the provided context; if something is unclear, fill in with light humor, not made-up data.
-
-Each line will be sent directly to a text-to-speech library. Only include spoken words in the script.
-
-Target length: 250–300 words (45–60 seconds).
-Each character line length: < 40 words.
+Now begin.
 """
-
 
 class Speaker(str, Enum):
     PETER = "Peter"
     STEWIE = "Stewie"
 
 class DialogueLine(BaseModel):
-    speaker: Speaker
-    text: str
+    speaker: Speaker = Field(description="The speaker of the line")
+    text: str = Field(description="The text of the line")
 
 class Script(BaseModel):
-    dialogue: list[DialogueLine]
+    title: str = Field(description="A short title for the dialogue")
+    dialogue: list[DialogueLine] = Field(description="The dialogue lines for the script")
 
+class Topic(BaseModel):
+    query: str = Field(description="A web search query about the best seed for a short-form news report style technical-focused video")
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
@@ -97,55 +75,39 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 script_schema = Script.model_json_schema()
 
 
-def generate_script(text: str) -> list[tuple[str, str]]:
-    """
-    Generate a script using OpenAI structured outputs.
-    Returns a list of tuples (Speaker, text).
-    """
-    response = client.chat.completions.create(
-        model="o3",  # Or another compatible model
-        messages=[{
-            "role": "system",
-            "content": SYSTEM_PROMPT
-        }, {
-            "role": "user",
-            "content": text
-        }],
-        response_format={
-            "type": "json_schema",
-            "json_schema": {
-                "name": "script",
-                "schema": script_schema
-            }
-        })
-
-    script = response.choices[0].message.content
-    script_obj = Script.model_validate_json(script)
-    # Convert to list of tuples as expected by the endpoint
-    return [(line.speaker.value, line.text) for line in script_obj.dialogue]
-
-
-def generate_script_manual(text: str) -> list[tuple[str, str]]:
+def generate_json_response(system_prompt: str, user_prompt: str, schema: type[BaseModel]) -> BaseModel:
     response = client.chat.completions.create(
         model="o3",
         messages=[{
             "role": "system",
-            "content": MANUAL_SYSTEM_PROMPT
+            "content": system_prompt
         }, {
             "role": "user",
-            "content": text
+            "content": user_prompt
         }],
         response_format={
             "type": "json_schema",
             "json_schema": {
-                "name": "script",
-                "schema": script_schema
+                "name": schema.__name__.lower(),
+                "schema": schema.model_json_schema()
             }
-        }
-    )
-    script = response.choices[0].message.content
-    script_obj = Script.model_validate_json(script)
-    return [(line.speaker.value, line.text) for line in script_obj.dialogue]
+        })
+    
+    json_content = response.choices[0].message.content
+    # Call model_validate_json on the schema class, not BaseModel
+    return schema.model_validate_json(json_content)
+
+def generate_script(text: str) -> tuple[str, list[tuple[str, str]]]: # (title, script)
+    """
+    Generate a script using OpenAI structured outputs.
+    Returns a list of tuples (Speaker, text).
+    """
+    script = generate_json_response(SCRIPT_SYSTEM_PROMPT, text, Script)
+    return script.title, [(line.speaker.value, line.text) for line in script.dialogue]
+
+def generate_topic(previous_queries: list[str], recent_news_topics: list[str]) -> str:
+    topic_prompt = TOPIC_PROMPT.format(previous_queries="\n".join(previous_queries), recent_news_topics="\n".join(recent_news_topics))
+    return generate_json_response("", topic_prompt, Topic).query
 
 if __name__ == "__main__":
     script = generate_script("""

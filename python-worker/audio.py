@@ -150,10 +150,30 @@ def align_with_whisperx(audio_path: str, transcript: str) -> list[tuple[str, flo
 
     # Extract words from all segments and convert to tuple format
     word_alignments = []
-    for segment in aligned["segments"]:
+    segments = aligned["segments"]
+    for i, segment in enumerate(segments):
         words = segment["words"]
-        for w in words:
-            word_alignments.append((w["word"], w["start"], w["end"]))
+        for j, w in enumerate(words):
+            # Determine start
+            if "start" in w:
+                start = w["start"]
+            else:
+                if j > 0 and "end" in words[j-1]:
+                    start = words[j-1]["end"] + 0.01
+                else:
+                    start = None  # fallback
+
+            # Determine end
+            if "end" in w:
+                end = w["end"]
+            else:
+                if j < len(words) - 1 and "start" in words[j+1]:
+                    end = words[j+1]["start"]
+                else:
+                    end = None  # fallback            
+
+            if start and end:
+                word_alignments.append((w["word"], start, end))
 
     logger.info(f"WhisperX generated {len(word_alignments)} word alignments from {len(aligned['segments'])} segments")
 

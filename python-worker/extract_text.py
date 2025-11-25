@@ -21,7 +21,7 @@ def fetch_and_extract(url: str, timeout: int = 12) -> str:
     try:
         resp = requests.get(url, headers={"User-Agent": UA}, timeout=timeout)
         resp.raise_for_status()
-        return extract_from_html(resp.text)[:24000]
+        return extract_from_html(resp.text)[:20000]
     except Exception:
         return ""
 
