@@ -140,15 +140,64 @@ def assemble_video(
     title_font_color = 'white'
     title_stroke_color = 'black'
     title_stroke_width = 3
-    title_duration = min(10.0, audio_duration)  # Show for first 10 seconds or until audio ends
+    title_duration = min(15.0, audio_duration)  # Show for first 10 seconds or until audio ends
     title_text_width = 1000  # Slightly narrower than video width for margins
     
-    # Position title just below top of screen (about 5% from top)
-    title_y_pos = int(video_height * 0.05)
+    # Build title text with newlines only on word boundaries
+    title_words = title.upper().split()
+    built_text = ""
     
+    for word in title_words:
+        # Try adding this word
+        test_text = built_text + (" " if built_text else "") + word
+        
+        # Create temporary clip to check if it wraps
+        temp_clip = TextClip(
+            text=test_text,
+            font=font_path,
+            font_size=title_font_size,
+            method='caption',
+            size=(title_text_width, None),
+            text_align='center',
+            stroke_width=title_stroke_width
+        )
+        
+        # Check if text wraps and where the newline occurs
+        rendered_text = temp_clip.text
+        temp_clip.close()
+        
+        # If text wraps, check if newline is in the middle of the current word
+        if "\n" in rendered_text:
+            # Split into lines
+            lines = rendered_text.split("\n")
+            last_line = lines[-1].strip()
+            
+            # Check if the word appears complete at the end of the last line
+            # If it does, the word wasn't split and wrapping occurred at word boundary (acceptable)
+            # If it doesn't, the word was likely split, so put newline before it
+            if last_line.endswith(word):
+                # Word fits completely at the end of new line, add it normally
+                built_text = test_text
+            else:
+                # Word is likely split or doesn't fit - put newline before it to force word boundary
+                # Remove trailing space from built_text if it exists and doesn't end with newline
+                if built_text and not built_text.endswith("\n"):
+                    # Remove trailing space if present
+                    built_text = built_text.rstrip(" ")
+                built_text = built_text + ("\n" if not built_text.endswith("\n") else "") + word
+        else:
+            # No wrapping, add word normally
+            built_text = test_text
+    
+    # Count number of lines in final text
+    num_lines = built_text.count("\n") + 1
+    
+    # Calculate vertical size: (font_size + 10) * number_of_lines
+    #title_vertical_size = (title_font_size + 10) * num_lines
+        
     # Create title text clip
     title_clip = TextClip(
-        text=title.upper(),
+        text=built_text,
         font=font_path,
         duration=title_duration,
         color=title_font_color,
@@ -156,13 +205,12 @@ def assemble_video(
         stroke_width=title_stroke_width,
         method='caption',
         font_size=title_font_size,
-        size=(title_text_width, 1800),  # Auto height
+        size=(title_text_width, 750),
         text_align='center'
     )
     
     # Center horizontally, position near top
-    title_clip = title_clip.with_position(('center', title_y_pos))
-    title_clip = add_landing_effect(title_clip, 0.2)
+    title_clip = title_clip.with_position(('center', 'top'))
     
     # Add PNG overlays
     overlay_clips = []
