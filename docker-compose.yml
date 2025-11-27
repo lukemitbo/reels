@@ -9,7 +9,6 @@ services:
       - N8N_BASIC_AUTH_ACTIVE=${N8N_BASIC_AUTH_ACTIVE}
       - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
       - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
-      # pass API keys so you can reference {{$env.KEY}} in nodes
       - X-API-KEY=${X-API-KEY}
       - SERPER_API_KEY=${SERPER_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
@@ -24,15 +23,16 @@ services:
     build: ./python-worker
     container_name: python-worker
     ports:
-      - "8000:8000"  # Expose for testing; n8n can also reach it internally
+      - "8000:8000"
     environment:
       - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SERPERDEV_API_KEY=${SERPERDEV_API_KEY}
+      - TWITTERAPIIO_API_KEY=${TWITTERAPIIO_API_KEY}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_SPREADSHEET_ID=${GOOGLE_SPREADSHEET_ID}
+      - GOOGLE_SHEET_NAME=${GOOGLE_SHEET_NAME}
     volumes:
-      - ./python-worker:/app        # Mount local code -> container for live reload
-      - ./data:/data                # Shared data volume
-      - ./python-worker/background-videos:/app/background-videos
-      - ./python-worker/final-videos:/app/final-videos
-      - ./python-worker/fonts:/app/fonts
-    command: uvicorn app:app --host 0.0.0.0 --port 8000 --reload
-
+      - ./python-worker:/app
+      - ./data:/data
